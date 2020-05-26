@@ -1,0 +1,2 @@
+All of these projects can be run using a JavaScript Compiler. I used Brackets with the Live Server plugin specifically. All of these
+tasks are variations of the same task adapted from Harvard's Multiple Object Tracking Studies that they conducted there. 
