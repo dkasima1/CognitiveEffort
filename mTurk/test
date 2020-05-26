@@ -1,0 +1,511 @@
+<!-- For help on using this template, see the blog post: https://blog.mturk.com/editing-the-survey-link-project-template-in-the-ui-7c75285105fb#.py7towsdx --><!-- HIT template: SurveyLink-v3.0 --><!-- The following snippet enables the 'responsive' behavior on smaller screens -->
+<meta content="width=device-width,initial-scale=1" name="viewport" />
+<section class="container" id="SurveyLink"><!-- Instructions -->
+<div class="row">
+<div class="col-xs-12 col-md-12">
+<div class="panel panel-primary"><!-- WARNING: the ids "collapseTrigger" and "instructionBody" are being used to enable expand/collapse feature --><a class="panel-heading" href="javascript:void(0);" id="collapseTrigger"><strong>Survey Link Instructions</strong> <span class="collapse-text">(Click to expand)</span> </a>
+<div class="panel-body" id="instructionBody">
+<p>We are conducting an academic survey about social networks. We need to understand your opinion about social networks. Select the link below to complete the survey. At the end of the survey, you will receive a code to paste into the box below to receive credit for taking our survey.</p>
+
+<p><strong>Make sure to leave this window open as you complete the survey. </strong> When you are finished, you will return to this page to paste the code into the box.</p>
+
+<p class="well well-sm"><strong><mark>Template note for Requesters</mark></strong> - To verify that Workers actually complete your survey, require each Worker to enter a <strong>unique</strong> survey completion code to your HIT. Consult with your survey service provider on how to generate this code at the end of your survey.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- End Instructions --><!-- Survey Link Layout --><script src="https://timbrady.org/turk/mot/d3.v3.min.js"></script><script src="https://timbrady.org/turk/mot/jquery.min.js"></script><script src="https://timbrady.org/turk/mot/seedrandom.js"></script><script src="https://timbrady.org/turk/TimTurkTools.js"></script>
+<style type="text/css">body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #DDD;
+}
+
+svg {
+  width: 640px; 
+  height: 480px;
+  position: absolute;
+  top: 25px;
+  background: white;
+  left: 50%;
+  margin-left: -320px;
+  shape-rendering: geometricPrecision;
+}
+
+.motObj {
+  opacity: .75;
+}
+
+#instructions {
+  width: 640px; 
+  position: absolute;
+  left: 50%;
+  margin-top: 200px;
+  margin-left: -320px; 
+}
+
+.finished:hover {
+  stroke: red;
+  stroke-width: 2px;
+}
+
+#thanks {
+  width: 640px; 
+  display: none;
+}
+    
+#nextScreen {
+  width: 640px; 
+  display: none;
+
+}
+    
+#finalScreen {
+  width: 640px; 
+  display: none;
+}    
+
+p {
+    white-space: pre;
+}
+    
+Button {
+  margin-top: 20px;
+  margin-right: 20px;
+  line-height: 60px;
+  font-weight: bold;
+  padding: 0 40px;
+  background: white;
+  border: black;
+}
+    
+Button:hover {
+  background: gray;
+}
+
+#trialCount {
+  width: 640px; 
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  margin-left: -320px;
+  display: none;
+  font-family: "Courier New", "Courier";
+}
+</style>
+<script>
+/* SVG CHECK                                                      */
+/* -------------------------------------------------------------- */
+
+/* Make sure the user has SVG, otherwise kill the whole HIT: */
+var svgWarningHtml = '\
+<div id="svgWarning"\
+     style="z-index: 1; width: 400px; padding: 40px;\
+     position: fixed; top: 200px; left: 50%; margin-left: -250px;\
+     background: #ddd; border: solid 4px #b00; font-size: 14pt;">\
+  <div id="warntitle"\
+       style="font-weight: bold; background: #b00; margin:10px; margin-bottom:30px; padding:20px; color: white; text-align: center;"\
+  >WARNING</div>\
+  Your browser does not support SVG, a required feature for this HIT. Please do not accept it.\
+  It should work fine in modern versions of Firefox, Safari, Chrome, and Microsoft Internet Explorer 9. It will not work in IE 6, 7, or 8.</div>\
+</div>';
+
+function svgWarning() {
+    // SVG test taken from Modernizr 2.0
+    if (!!document.createElementNS &&
+        !!document.createElementNS('http://www.w3.org/2000/svg', 'svg').createSVGRect)
+        return;
+    // No SVG, do something about it.
+    d3.select("body").html(svgWarningHtml);
+}
+
+$(function() {
+  svgWarning();
+});
+</script><script>
+/* MAIN EXPERIMENT                                                */
+/* -------------------------------------------------------------- */
+
+// Objects and num to track:
+var numObjs = 8;
+var numTracked = 3;
+var objsRandom = [8, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4];
+
+// Trial:
+var currentTrial = 0;
+var totalTrials = 0;
+var numTrials = 3;
+var totalReward = 0;
+
+// Trial order:
+// The shuffle is random because we haven't seeded the random number generator yet
+var order = new Array();
+for (var i=0;i<numTrials;i++) { order.push(i); }
+order = Shuffle(order);
+
+var buf = 25; // Buffer around outside of SVG element
+var svg; // Placeholder for SVG element
+
+$(function() {
+  $("#submitButton").hide();
+});
+
+function BeginExperiment() {
+  if (IsTurkPreview()) {
+    //alert("Please accept the HIT before continuing!");
+    //return;
+  }
+  $('#instructions').hide();
+  $('#trialCount').show();
+  svg = d3.select("body").append("svg");
+  svg.append("rect")
+    .attr("fill", "white")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", 640)
+    .attr("height", 480);
+  StartTrial();
+}
+
+function NextTrial() { 
+  currentTrial++;
+  totalTrials++;
+  // If still more trials:
+  if (currentTrial < numTrials && totalTrials < 80) {
+    $('#curTrial').text(currentTrial+1);
+    // After a brief delay, remove all of the objects from the screen
+    setTimeout(function() { svg.selectAll("circle").remove(); }, 400);
+    // Now start the next trial with another delay
+    setTimeout(function() { StartTrial(); }, 400);
+    
+  // Otherwise, if done:
+  } else {
+    setTimeout(function() {
+      $("#thanks").show();
+      $("svg").hide();
+      $("#trialCount").hide();
+      var submit = document.createElement("button");
+      submit.innerHTML = "Submit";
+      var yes = document.createElement("button");
+      yes.innerHTML = "Yes";
+      var no = document.createElement("button");
+      no.innerHTML = "No";
+      var body = document.getElementsByTagName("body")[0];
+      body.appendChild(submit);
+      submit.addEventListener ("click", function() {
+        body.appendChild(yes);
+        body.appendChild(no);
+        body.removeChild(submit);
+        $("#thanks").hide();
+        $("#nextScreen").show();
+        yes.addEventListener ("click", function() {
+          body.removeChild(yes);
+          body.removeChild(no);
+          $("yes").hide();
+          $("svg").hide();
+          $("#trialCount").hide();
+          $("#nextScreen").hide();
+          currentTrial = 0;
+          $('#curTrial').text(currentTrial+1);
+          BeginExperiment();
+        });
+        no.addEventListener ("click", function() {
+          body.removeChild(yes);
+          body.removeChild(no);
+          $("yes").hide();
+          $("svg").hide();
+          $("#trialCount").hide();
+          $("#nextScreen").hide();    
+          $("no").hide();
+          var times = totalTrials/20;
+          totalReward = totalTrials/20;
+          if (times == 4) {
+              totalReward = 2.50;
+          } else if (times == 3) {
+              totalReward = 2.25;
+          } else if (times == 2) {
+              totalReward = 1.75; 
+          } else {
+              totalReward = 1;
+          }
+          $("#rewardText").text("You will be awarded $" + totalReward + "." + "\n\nPlease enter this code into the survey code box:\n8TFQHFYA5X")
+          $("#finalScreen").show();
+        });
+      });
+    }, 400);
+  }
+}
+
+function StartTrial() {
+  svg.on("click", RunTrial);
+  svg.append("text")
+    .attr("x", 210)
+    .attr("y", 200)
+    .attr("id", "toStart")
+    .attr("fill", "black")
+    .attr("font-weight", "bold")
+    .attr("font-size", "16pt")
+    .text("Click to start this trial");
+}
+
+function RunTrial() {
+  // This seed sets it up so everybody gets the same trial N (shown in random order)
+  Math.seedrandom(order[currentTrial]);
+  var rando1 = objsRandom[currentTrial];
+  // Clear out the ability to start a new trial
+  svg.on("click", null);
+  svg.selectAll("#toStart").remove();
+  
+   /* Set initial speeds and locations of objects in each direction */
+  var velocityX = new Array();
+  var velocityY = new Array();
+  var startX = new Array();
+  var startY = new Array();
+  var speed = 0.2;
+  for (var i=0; i<rando1; i++) {
+    var angle = Math.random()*2*Math.PI;
+    velocityX.push(Math.cos(angle)*speed);
+    velocityY.push(Math.sin(angle)*speed);
+    var tooClose = true;
+    while (tooClose) {
+      startX[i] = Math.random()*(640-buf*2) + buf;
+      startY[i] = Math.random()*(480-buf*2) + buf;
+      tooClose = false;
+      for (var j=0; j<rando1-1; j++) {
+        if (Math.abs(startX[i] - startX[j]) < 50 && 
+          Math.abs(startY[i] - startY[j])) {
+          tooClose = true;
+        }
+      }
+    }
+  }
+  
+  // Set up the circle objects to be tracked. The first one is always the one
+  // that will later be removed (index 0, id removedItem). The first numTracked
+  // are always the tracked ones (class tracked). The remainder are distractors.
+    
+  svg.selectAll(".motObj")
+    .data(d3.range(rando1))
+    .enter()
+      .append("circle")
+      .attr("cx", function(d,i) {return startX[i];})
+      .attr("cy", function(d,i) {return startY[i];})
+      .attr("r", 25)
+      .attr("fill", "black")
+      .attr("class", function(d,i) { 
+        return (i<numTracked) ? "motObj tracked" : "motObj";
+       })
+       .attr("id", function(d,i) { 
+        return (i==0) ? "removedItem" : "";
+       });      
+
+  // Visually indicate the tracked items, to start the trial off:
+  d3.selectAll(".tracked").attr("fill", "red");
+
+  // Set up trial duration
+  var trialLen = 2000*Math.random() + 4000; // trials between 4 and 6s
+  var delay = 1000; // Delay before movement starts
+  var last = delay; 
+  var t = 0.0;
+  var colChanged = false;
+  d3.timer(function(elapsed) {
+    // This function fires as often as possible
+    t = elapsed - last;
+    last = elapsed;
+    
+    // Change to black:
+    if (elapsed > delay && colChanged==false) {
+      d3.selectAll(".tracked").attr("fill", "black");
+      colChanged = true;
+    }
+    
+    // If it has been trialLen but less than 500ms later since the trial
+    // started, hide the objects:
+    if (elapsed-delay > trialLen && elapsed-delay < trialLen+500) {
+       d3.selectAll(".motObj").attr("fill", "white");
+       
+    // If it has been more than trialLen+500, reshow the objects, kill
+    // the timer (return true) and wait for clicks
+    } else if (elapsed-delay > trialLen+500) {
+       d3.selectAll(".motObj:not(#removedItem)").attr("fill", "black");
+       
+       // When the click anywhere in the SVG, do the following:
+       svg.on("click", function() {
+        var pos = d3.mouse(this);
+        // Feedback: Put back the correct answer, dashed.
+        d3.selectAll("#removedItem")
+           .attr("fill", "white")
+          .attr("stroke", "black")
+          .attr("stroke-width", 2)
+          .attr("fill-opacity", 0.0)
+          .attr("stroke-dasharray", "5,5");
+          
+        // Mark where they clicked, in blue:
+        svg.append("circle")
+          .attr("cx", pos[0])
+          .attr("cy", pos[1])
+          .attr("r", 25)
+          .attr("fill", "white")
+          .attr("fill-opacity", 0.0)
+          .attr("stroke", "blue")
+          .attr("stroke-width", 2)
+          .attr("stroke-dasharray", "5,5");
+          
+        // Save where they clicked:
+        d3.select("body").append("input")
+          .attr("type", "hidden")
+          .attr("name", "t" + order[currentTrial] + "_clicked")
+          .attr("value", pos);
+          
+        // Save the locations of all of the objects. Object 0 is always the 
+        // item that goes missing; 0-3 are always tracked; 4-7 not tracked.
+        var objs = d3.selectAll(".motObj");        
+        for (var i=0; i <rando1; i++) {
+          d3.select("body").append("input")
+            .attr("type", "hidden")
+            .attr("name", "t" + order[currentTrial] + "_obj_n" + i)
+            .attr("value", parseInt(objs[0][i].getAttribute('cx'))
+              + "," + parseInt(objs[0][i].getAttribute('cy')));
+        }
+        svg.on("click", null);
+        NextTrial();
+       });
+       
+       // Now return true to quit timer
+       return true;
+       
+    // If it has been less time than trialLen, update the object positions:   
+    } else {
+      update();
+    }
+  }, delay);
+
+  // Move the objects every frame:
+  function update() {
+    svg.selectAll(".motObj")
+      .attr("cx", function(d) {return getXPosition(d, d3.select(this).attr('cx'));})
+      .attr("cy", function(d) {return getYPosition(d, d3.select(this).attr('cy'));});
+  }
+  
+  // Calculate new positions:
+  function getXPosition(objNum, curPosition) {
+    var newPosition = parseFloat(curPosition) + (t)*velocityX[objNum];
+    if (newPosition>(640-buf) || newPosition<buf) {
+      velocityX[objNum] *= -1;
+      return curPosition;
+    }
+    return newPosition;
+  }
+
+  function getYPosition(objNum, curPosition) {
+    var newPosition = parseFloat(curPosition) + (t)*velocityY[objNum];
+    if (newPosition>(480-buf) || newPosition<buf) {
+      velocityY[objNum] *= -1;
+      return curPosition;
+    }
+    return newPosition;
+  }
+}
+</script>
+<div id="thanks">Thanks for doing the HIT!<br />
+<br />
+If we were to offer you a chance to do the experiment again,<br />
+how much would you like offered as your compensation?<br />
+<br />
+<textarea cols="50" name="thoughts" rows="5">  </textarea></div>
+
+<div id="nextScreen">We can offer you to do the experiment again for 25 cents<br />
+less than what we offered you for this one.<br />
+<br />
+If you would like to do this experiment again for the reduced price<br />
+please click the yes button, otherwise click the no button.</div>
+
+<div id="finalScreen">
+<p id="rewardText">&nbsp;</p>
+</div>
+
+<div id="instructions">
+<p>In this HIT, you will have to track multiple moving objects. You will see eight objects or fewer. The three you must track will appear in <font color="red">RED</font> and the others -- the ones you do not need to track -- will appear in BLACK.</p>
+<img align="center" src="https://timbrady.org/turk/mot/instruc1.png" width="300" />
+<p>After a brief delay, they will all turn black and begin moving around the screen. Track the objects that had been in <font color="red">RED</font> as they move.</p>
+<img align="center" src="https://timbrady.org/turk/mot/instruc2.png" width="300" /> <img align="center" src="https://timbrady.org/turk/mot/instruc3.png" width="300" />
+<p>After some amount of time, the objects will stop moving and disappear briefly. Then most of them will reappear, but one of the objects you were tracking will be missing. Your job is to click where that object last appeared.</p>
+<img align="center" src="https://timbrady.org/turk/mot/instruc4.png" width="200" /> <img align="center" src="https://timbrady.org/turk/mot/instruc5.png" width="200" /> <img align="center" src="https://timbrady.org/turk/mot/instruc6.png" width="200" />
+<p>You will have to perform this task 20 times, which should take about 3 minutes.</p>
+&nbsp;
+
+<p align="center"><a href="javascript:BeginExperiment()" style="font-weight:bold">Click here when you are ready to begin</a></p>
+
+<p>&nbsp;</p>
+
+<p style="font-size:10pt">By answering the following questions, you are participating in a study being performed by psychologists in the Johns Hopkins Department of Psychology. If you have questions about this research, please email dkasima1@jhu.edu. Your participation in this research is voluntary. You may decline to answer any or all of the following questions. You may decline further participation, at any time, without adverse consequences. Your anonymity is assured; the researchers who have requested your participation will not receive any personal information about you.</p>
+
+<p>&nbsp;</p>
+</div>
+
+<div id="trialCount">Trial <span id="curTrial">1</span> of 20</div>
+
+<div class="row" id="workContent">
+<div class="col-xs-12 col-md-6 col-md-offset-3"><!-- Content for Worker -->
+<table class="table table-condensed table-bordered">
+	<colgroup>
+		<col class="col-xs-4 col-md-4" />
+		<col class="col-xs-8 col-md-8" />
+	</colgroup>
+	<tbody>
+		<tr>
+			<td><label>Survey link:</label></td>
+			<td><a class="dont-break-out" href="http://[example.com/survey345.html]" target="_blank">http://example.com/survey345.html</a></td>
+		</tr>
+	</tbody>
+</table>
+<!-- End Content for Worker --><!-- Input from Worker -->
+
+<div class="form-group"><label for="surveycode">Provide the survey code here:</label> <input class="form-control" id="surveycode" name="surveycode" placeholder="e.g. 123456" required="" type="text" /></div>
+<!-- End input from Worker --></div>
+</div>
+<!-- End Survey Link Layout --></section>
+<!-- Please note that Bootstrap CSS/JS and JQuery are 3rd party libraries that may update their url/code at any time. Amazon Mechanical Turk (MTurk) is including these libraries as a default option for you, but is not responsible for any changes to the external libraries --><!-- External CSS references -->
+<link crossorigin="anonymous" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css" integrity="sha384-IS73LIqjtYesmURkDE9MXKbXqYA8rvKEp/ghicjem7Vc3mGRdQRptJSz60tvrB6+" rel="stylesheet" /><!-- Open internal style sheet -->
+<style type="text/css">#collapseTrigger{
+  color:#fff;
+  display: block;
+  text-decoration: none;
+}
+#submitButton{
+  white-space: normal;
+}
+.image{
+  margin-bottom: 15px; 
+}
+/* CSS for breaking long words/urls */
+.dont-break-out {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  -ms-word-break: break-all;
+  word-break: break-all;
+  word-break: break-word;
+  -ms-hyphens: auto;
+  -moz-hyphens: auto;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+}
+</style>
+<!-- Close internal style sheet --><!-- External JS references --><script src="https://code.jquery.com/jquery-3.1.0.min.js"   integrity="sha256-cCueBR6CsyA4/9szpPfrX3s49M9vUU5BgtiJj06wt/s="   crossorigin="anonymous"></script><script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.0.3/js/bootstrap.min.js" integrity="sha384-s1ITto93iSMDxlp/79qhWHi+LsIi9Gx6yL+cOKDuymvihkfol83TYbLbOw+W/wv4" crossorigin="anonymous"></script><!-- Open internal javascript --><script>
+  $(document).ready(function() {
+    // Instructions expand/collapse
+    var content = $('#instructionBody');
+    var trigger = $('#collapseTrigger');
+    content.hide();
+    $('.collapse-text').text('(Click to expand)');
+    trigger.click(function(){
+      content.toggle();
+      var isVisible = content.is(':visible');
+      if(isVisible){
+        $('.collapse-text').text('(Click to collapse)');
+      }else{
+        $('.collapse-text').text('(Click to expand)');
+      }
+    });
+    // end expand/collapse
+  });
+</script><!-- Close internal javascript -->

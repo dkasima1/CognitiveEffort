@@ -1,0 +1,357 @@
+
+<script src="https://timbrady.org/turk/mot/d3.v3.min.js"></script>
+<script src="https://timbrady.org/turk/mot/jquery.min.js"></script>
+<script src="https://timbrady.org/turk/mot/seedrandom.js"></script>
+<script src="https://timbrady.org/turk/TimTurkTools.js"></script>
+
+<style>
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #DDD;
+}
+
+svg {
+  width: 640px; 
+  height: 480px;
+  position: absolute;
+  top: 25px;
+  background: white;
+  left: 50%;
+  margin-left: -320px;
+  shape-rendering: geometricPrecision;
+}
+
+.motObj {
+  opacity: .75;
+}
+
+#instructions {
+  width: 640px; 
+  position: absolute;
+  left: 50%;
+  margin-left: -320px; 
+}
+
+.finished:hover {
+  stroke: red;
+  stroke-width: 2px;
+}
+
+#thanks {
+  width: 640px; 
+  display: none;
+}
+
+#trialCount {
+  width: 640px; 
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  margin-left: -320px;
+  display: none;
+  font-family: "Courier New", "Courier";
+}
+</style>
+
+<script>
+/* SVG CHECK                                                      */
+/* -------------------------------------------------------------- */
+
+/* Make sure the user has SVG, otherwise kill the whole HIT: */
+var svgWarningHtml = '\
+<div id="svgWarning"\
+     style="z-index: 1; width: 400px; padding: 40px;\
+     position: fixed; top: 200px; left: 50%; margin-left: -250px;\
+     background: #ddd; border: solid 4px #b00; font-size: 14pt;">\
+  <div id="warntitle"\
+       style="font-weight: bold; background: #b00; margin:10px; margin-bottom:30px; padding:20px; color: white; text-align: center;"\
+  >WARNING</div>\
+  Your browser does not support SVG, a required feature for this HIT. Please do not accept it.\
+  It should work fine in modern versions of Firefox, Safari, Chrome, and Microsoft Internet Explorer 9. It will not work in IE 6, 7, or 8.</div>\
+</div>';
+
+function svgWarning() {
+    // SVG test taken from Modernizr 2.0
+    if (!!document.createElementNS &&
+        !!document.createElementNS('http://www.w3.org/2000/svg', 'svg').createSVGRect)
+        return;
+    // No SVG, do something about it.
+    d3.select("body").html(svgWarningHtml);
+}
+
+$(function() {
+  svgWarning();
+});
+</script>
+
+
+<script>
+/* MAIN EXPERIMENT                                                */
+/* -------------------------------------------------------------- */
+
+// Objects and num to track:
+var numObjs = 8;
+var numTracked = 3;
+var objsRandom = 6;
+
+// Trial:
+var currentTrial = 0;
+var numTrials = 20;
+
+// Trial order:
+// The shuffle is random because we haven't seeded the random number generator yet
+var order = new Array();
+for (var i=0;i<numTrials;i++) { order.push(i); }
+order = Shuffle(order);
+
+var buf = 25; // Buffer around outside of SVG element
+var svg; // Placeholder for SVG element
+
+$(function() {
+  $("#submitButton").hide();
+});
+
+function BeginExperiment() {
+  if (IsTurkPreview()) {
+    //alert("Please accept the HIT before continuing!");
+    //return;
+  }
+  $('#instructions').hide();
+  $('#trialCount').show();
+  svg = d3.select("body").append("svg");
+  svg.append("rect")
+    .attr("fill", "white")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", 640)
+    .attr("height", 480);
+  StartTrial();
+}
+
+function NextTrial() { 
+  currentTrial++;
+  // If still more trials:
+  if (currentTrial < numTrials) {
+    $('#curTrial').text(currentTrial+1);
+    // After a brief delay, remove all of the objects from the screen
+    setTimeout(function() { svg.selectAll("circle").remove(); }, 400);
+    // Now start the next trial with another delay
+    setTimeout(function() { StartTrial(); }, 400);
+    
+  // Otherwise, if done:
+  } else {
+    setTimeout(function() {
+      $("#thanks").show(); 
+      $("#submitButton").show();
+      $("svg").hide();
+      $("#trialCount").hide();
+    }, 400);
+  }
+}
+
+function StartTrial() {
+  svg.on("click", RunTrial);
+  svg.append("text")
+    .attr("x", 210)
+    .attr("y", 200)
+    .attr("id", "toStart")
+    .attr("fill", "black")
+    .attr("font-weight", "bold")
+    .attr("font-size", "16pt")
+    .text("Click to start this trial");
+}
+
+function RunTrial() {
+  // This seed sets it up so everybody gets the same trial N (shown in random order)
+  Math.seedrandom(order[currentTrial]);
+  var rando1 = objsRandom;
+  // Clear out the ability to start a new trial
+  svg.on("click", null);
+  svg.selectAll("#toStart").remove();
+  
+   /* Set initial speeds and locations of objects in each direction */
+  var velocityX = new Array();
+  var velocityY = new Array();
+  var startX = new Array();
+  var startY = new Array();
+  var speed = 0.2;
+  for (var i=0; i<rando1; i++) {
+    var angle = Math.random()*2*Math.PI;
+    velocityX.push(Math.cos(angle)*speed);
+    velocityY.push(Math.sin(angle)*speed);
+    var tooClose = true;
+    while (tooClose) {
+      startX[i] = Math.random()*(640-buf*2) + buf;
+      startY[i] = Math.random()*(480-buf*2) + buf;
+      tooClose = false;
+      for (var j=0; j<rando1-1; j++) {
+        if (Math.abs(startX[i] - startX[j]) < 50 && 
+          Math.abs(startY[i] - startY[j])) {
+          tooClose = true;
+        }
+      }
+    }
+  }
+  
+  // Set up the circle objects to be tracked. The first one is always the one
+  // that will later be removed (index 0, id removedItem). The first numTracked
+  // are always the tracked ones (class tracked). The remainder are distractors.
+    
+  svg.selectAll(".motObj")
+    .data(d3.range(rando1))
+    .enter()
+      .append("circle")
+      .attr("cx", function(d,i) {return startX[i];})
+      .attr("cy", function(d,i) {return startY[i];})
+      .attr("r", 25)
+      .attr("fill", "black")
+      .attr("class", function(d,i) { 
+        return (i<numTracked) ? "motObj tracked" : "motObj";
+       })
+       .attr("id", function(d,i) { 
+        return (i==0) ? "removedItem" : "";
+       });      
+
+  // Visually indicate the tracked items, to start the trial off:
+  d3.selectAll(".tracked").attr("fill", "red");
+
+  // Set up trial duration
+  var trialLen = 2000*Math.random() + 4000; // trials between 4 and 6s
+  var delay = 1000; // Delay before movement starts
+  var last = delay; 
+  var t = 0.0;
+  var colChanged = false;
+  d3.timer(function(elapsed) {
+    // This function fires as often as possible
+    t = elapsed - last;
+    last = elapsed;
+    
+    // Change to black:
+    if (elapsed > delay && colChanged==false) {
+      d3.selectAll(".tracked").attr("fill", "black");
+      colChanged = true;
+    }
+    
+    // If it has been trialLen but less than 500ms later since the trial
+    // started, hide the objects:
+    if (elapsed-delay > trialLen && elapsed-delay < trialLen+500) {
+       d3.selectAll(".motObj").attr("fill", "white");
+       
+    // If it has been more than trialLen+500, reshow the objects, kill
+    // the timer (return true) and wait for clicks
+    } else if (elapsed-delay > trialLen+500) {
+       d3.selectAll(".motObj:not(#removedItem)").attr("fill", "black");
+       
+       // When the click anywhere in the SVG, do the following:
+       svg.on("click", function() {
+        var pos = d3.mouse(this);
+        // Feedback: Put back the correct answer, dashed.
+        d3.selectAll("#removedItem")
+           .attr("fill", "white")
+          .attr("stroke", "black")
+          .attr("stroke-width", 2)
+          .attr("fill-opacity", 0.0)
+          .attr("stroke-dasharray", "5,5");
+          
+        // Mark where they clicked, in blue:
+        svg.append("circle")
+          .attr("cx", pos[0])
+          .attr("cy", pos[1])
+          .attr("r", 25)
+          .attr("fill", "white")
+          .attr("fill-opacity", 0.0)
+          .attr("stroke", "blue")
+          .attr("stroke-width", 2)
+          .attr("stroke-dasharray", "5,5");
+          
+        // Save where they clicked:
+        d3.select("body").append("input")
+          .attr("type", "hidden")
+          .attr("name", "t" + order[currentTrial] + "_clicked")
+          .attr("value", pos);
+          
+        // Save the locations of all of the objects. Object 0 is always the 
+        // item that goes missing; 0-3 are always tracked; 4-7 not tracked.
+        var objs = d3.selectAll(".motObj");        
+        for (var i=0; i <rando1; i++) {
+          d3.select("body").append("input")
+            .attr("type", "hidden")
+            .attr("name", "t" + order[currentTrial] + "_obj_n" + i)
+            .attr("value", parseInt(objs[0][i].getAttribute('cx'))
+              + "," + parseInt(objs[0][i].getAttribute('cy')));
+        }
+        svg.on("click", null);
+        NextTrial();
+       });
+       
+       // Now return true to quit timer
+       return true;
+       
+    // If it has been less time than trialLen, update the object positions:   
+    } else {
+      update();
+    }
+  }, delay);
+
+  // Move the objects every frame:
+  function update() {
+    svg.selectAll(".motObj")
+      .attr("cx", function(d) {return getXPosition(d, d3.select(this).attr('cx'));})
+      .attr("cy", function(d) {return getYPosition(d, d3.select(this).attr('cy'));});
+  }
+  
+  // Calculate new positions:
+  function getXPosition(objNum, curPosition) {
+    var newPosition = parseFloat(curPosition) + (t)*velocityX[objNum];
+    if (newPosition>(640-buf) || newPosition<buf) {
+      velocityX[objNum] *= -1;
+      return curPosition;
+    }
+    return newPosition;
+  }
+
+  function getYPosition(objNum, curPosition) {
+    var newPosition = parseFloat(curPosition) + (t)*velocityY[objNum];
+    if (newPosition>(480-buf) || newPosition<buf) {
+      velocityY[objNum] *= -1;
+      return curPosition;
+    }
+    return newPosition;
+  }
+}
+</script>
+
+<div id="thanks">
+  Thanks for doing the HIT! Any thoughts for us about it?<br>
+  <textarea name="thoughts" rows=5 cols=50>
+  </textarea>
+  <p>Otherwise, go ahead and submit:</p>
+</div>
+
+<div id="instructions">
+  <p>In this HIT, you will have to track multiple moving objects. You will see eight objects. The four you must track will appear in <font color="red">RED</font> and the others -- the ones you do not need to track -- will appear in BLACK.</p>
+  <img src="https://timbrady.org/turk/mot/instruc1.png" width="300" align="center">
+  
+  <p>After a brief delay, they will all turn black and begin moving around the screen. Track the objects that had been in <font color="red">RED</font> as they move.</p>
+  
+  <img src="https://timbrady.org/turk/mot/instruc2.png" width="300" align="center">
+  <img src="https://timbrady.org/turk/mot/instruc3.png" width="300" align="center">
+  
+  <p>After some amount of time, the objects will stop moving and disappear briefly. Then most of them will reappear, but one of the objects you were tracking will be missing. Your job is to click where that object last appeared. </p>
+  <img src="https://timbrady.org/turk/mot/instruc4.png" width="200" align="center">
+  <img src="https://timbrady.org/turk/mot/instruc5.png" width="200" align="center">
+  <img src="https://timbrady.org/turk/mot/instruc6.png" width="200" align="center">
+  
+  <p>You will have to perform this task 20 times, which should take about 10 minutes.</p>
+  <br>
+  <p align="center"><a href="javascript:BeginExperiment()" style="font-weight:bold">Click here when you are ready to begin</a></p>
+  <p>&nbsp;</p>
+  <p style="font-size:10pt">
+  By answering the following questions, you are participating in a study being performed by psychologists in the Harvard Department of Psychology. If you have questions about this research, please contact Timothy Brady at tbrady@wjh.harvard.edu. Your participation in this research is voluntary. You may decline to answer any or all of the following questions. You may decline further participation, at any time, without adverse consequences. Your anonymity is assured; the researchers who have requested your participation will not receive any personal information about you.
+  </p>
+  <p>&nbsp;</p>
+</div>
+
+<div id="trialCount">
+  Trial <span id="curTrial">1</span> of 20
+</div>
